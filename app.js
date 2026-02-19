@@ -229,6 +229,7 @@ const el = {
   optionalReportTableBody: document.querySelector("#optionalReportTable tbody"),
   nakshatraSection: document.getElementById("nakshatraSection"),
   nakshatraGrid: document.getElementById("nakshatraGrid"),
+  nakshatraPrintGrid: document.getElementById("nakshatraPrintGrid"),
   lagnaInfo: document.getElementById("lagnaInfo"),
   nakshatraUnmapped: document.getElementById("nakshatraUnmapped"),
   nakshatraHouseTableBody: document.querySelector("#nakshatraHouseTable tbody"),
@@ -406,6 +407,10 @@ function handleReset() {
   }
   if (el.nakshatraGrid) {
     el.nakshatraGrid.innerHTML = "";
+  }
+  if (el.nakshatraPrintGrid) {
+    el.nakshatraPrintGrid.innerHTML = "";
+    el.nakshatraPrintGrid.hidden = true;
   }
   if (el.lagnaInfo) {
     el.lagnaInfo.textContent = "";
@@ -1013,6 +1018,10 @@ function renderNakshatraHouseSection(lagnaDestiny, reports) {
     el.nakshatraSection.hidden = false;
     el.lagnaInfo.textContent = `Selected lagna method ${lagnaMethod} generated total ${lagnaRawNumber ?? "-"} (token: ${lagnaToken}), which could not be normalized to the 10-108 kundli range.`;
     el.nakshatraGrid.innerHTML = "";
+    if (el.nakshatraPrintGrid) {
+      el.nakshatraPrintGrid.innerHTML = "";
+      el.nakshatraPrintGrid.hidden = true;
+    }
     el.nakshatraHouseTableBody.innerHTML = `<tr><td colspan="6">No house placements available.</td></tr>`;
     if (el.nakshatraUnmapped) {
       el.nakshatraUnmapped.hidden = true;
@@ -1035,6 +1044,7 @@ function renderNakshatraHouseSection(lagnaDestiny, reports) {
   const { placements, unmapped } = buildHousePlacements(reports, lagnaSignIndex);
 
   renderNakshatraGrid(lagnaSignIndex, placements);
+  renderNakshatraPrintGrid(lagnaSignIndex, placements);
   renderNakshatraHouseTable(placements);
 
   el.lagnaInfo.textContent = `Lagna: ${ZODIAC_SIGNS[lagnaSignIndex]} (method ${lagnaMethod}, token ${lagnaToken}, total ${lagnaTotalText}). Kundli range normalization uses 10-108; values above 108 are reduced. Houses 6, 8, and 12 are highlighted in red.`;
@@ -1141,6 +1151,70 @@ function renderNakshatraGrid(lagnaSignIndex, placements) {
 
     el.nakshatraGrid.appendChild(cell);
   });
+}
+
+function renderNakshatraPrintGrid(lagnaSignIndex, placements) {
+  if (!el.nakshatraPrintGrid) {
+    return;
+  }
+
+  const placementsBySign = Array.from({ length: 12 }, () => []);
+  placements.forEach((placement) => {
+    placementsBySign[placement.signIndex].push(placement);
+  });
+
+  const componentShort = {
+    Chaldean: "Ch",
+    "Pyramid 2D": "P2",
+    "Pyramid 1D": "P1"
+  };
+
+  el.nakshatraPrintGrid.innerHTML = "";
+  SOUTH_INDIAN_LAYOUT.flat().forEach((signIndex) => {
+    if (signIndex === null) {
+      const gap = document.createElement("div");
+      gap.className = "nakshatra-print-gap";
+      gap.setAttribute("aria-hidden", "true");
+      el.nakshatraPrintGrid.appendChild(gap);
+      return;
+    }
+
+    const house = houseFromLagna(lagnaSignIndex, signIndex);
+    const signPlacements = placementsBySign[signIndex]
+      .slice()
+      .sort((a, b) => a.sortIndex - b.sortIndex);
+
+    const cell = document.createElement("article");
+    cell.className = "nakshatra-print-cell";
+    if (signIndex === lagnaSignIndex) {
+      cell.classList.add("is-lagna");
+    }
+    if (DUSTHANA_HOUSES.has(house)) {
+      cell.classList.add("is-dusthana");
+    }
+
+    const hitItems = signPlacements
+      .map((placement) => {
+        const valueText = placement.wasAdjusted
+          ? `${placement.rawValue}->${placement.value}`
+          : `${placement.value}`;
+        const component = componentShort[placement.component] || placement.component;
+        return `<li>${placement.category} ${component}: ${valueText}</li>`;
+      })
+      .join("");
+
+    cell.innerHTML = `
+      <div class="nakshatra-print-head">
+        <span class="nakshatra-print-sign">${ZODIAC_SIGNS[signIndex]}</span>
+        <span class="nakshatra-print-house">H${house}${signIndex === lagnaSignIndex ? " Lagna" : ""}</span>
+      </div>
+      ${hitItems ? `<ul class="nakshatra-print-hits">${hitItems}</ul>` : '<p class="nakshatra-print-empty">-</p>'}
+    `;
+
+    el.nakshatraPrintGrid.appendChild(cell);
+  });
+
+  el.nakshatraPrintGrid.hidden = false;
 }
 
 function renderNakshatraHouseTable(placements) {

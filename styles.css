@@ -954,6 +954,18 @@ button.identifier-remove-icon:focus-visible {
   gap: 0.46rem;
 }
 
+.nakshatra-print-grid {
+  display: none;
+}
+
+.nakshatra-print-gap {
+  display: none;
+}
+
+.nakshatra-print-cell {
+  display: none;
+}
+
 .nakshatra-cell {
   min-height: 13rem;
   border-radius: 0.8rem;
@@ -1648,13 +1660,89 @@ button.identifier-remove-icon:focus-visible {
     gap: 3mm !important;
   }
 
-  .nakshatra-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 2.5mm !important;
+  #nakshatraSection #nakshatraGrid,
+  #nakshatraSection #nakshatraUnmapped,
+  #nakshatraSection .table-wrap {
+    display: none !important;
   }
 
-  .nakshatra-gap {
-    display: none !important;
+  #nakshatraSection #nakshatraPrintGrid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.8mm;
+  }
+
+  #nakshatraSection .nakshatra-print-gap {
+    display: block !important;
+    border: 0.2mm dashed #d8d8d8;
+    background: #fafafa;
+    min-height: 18mm;
+  }
+
+  #nakshatraSection .nakshatra-print-cell {
+    display: grid !important;
+    gap: 1.2mm;
+    align-content: start;
+    min-height: 18mm;
+    border: 0.25mm solid #d2d2d2;
+    background: #ffffff !important;
+    padding: 1.2mm 1.4mm;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  #nakshatraSection .nakshatra-print-cell.is-lagna {
+    border-color: #a97033;
+  }
+
+  #nakshatraSection .nakshatra-print-cell.is-dusthana {
+    border-color: #cc7f8a;
+  }
+
+  #nakshatraSection .nakshatra-print-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1mm;
+  }
+
+  #nakshatraSection .nakshatra-print-sign {
+    font-size: 8pt;
+    font-weight: 700;
+    color: #111111;
+  }
+
+  #nakshatraSection .nakshatra-print-house {
+    font-size: 7.1pt;
+    color: #333333;
+  }
+
+  #nakshatraSection .nakshatra-print-hits {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.8mm;
+  }
+
+  #nakshatraSection .nakshatra-print-hits li {
+    font-size: 6.9pt;
+    line-height: 1.2;
+    border: 0.2mm solid #dddddd;
+    border-radius: 0.8mm;
+    padding: 0.45mm 0.7mm;
+    color: #111111;
+    overflow-wrap: anywhere;
+  }
+
+  #nakshatraSection .nakshatra-print-cell.is-dusthana .nakshatra-print-hits li {
+    border-color: #d7a1a9;
+  }
+
+  #nakshatraSection .nakshatra-print-empty {
+    margin: 0;
+    font-size: 7pt;
+    color: #666666;
   }
 
   .panel,
