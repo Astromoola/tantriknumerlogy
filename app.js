@@ -43,6 +43,14 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December"
 ];
 
+const IDENTIFIER_TYPES = [
+  { value: "car", label: "Car Number" },
+  { value: "mobile", label: "Mobile Number" },
+  { value: "aadhar", label: "Aadhar Number" },
+  { value: "ssn", label: "Social Security Number" },
+  { value: "custom", label: "Custom Identifier" }
+];
+
 const LOSHU_LAYOUT = [
   [4, 9, 2],
   [3, 5, 7],
@@ -66,6 +74,23 @@ const SHIVA_MAYA_START_BY_RULING = {
   8: 7,
   9: 3
 };
+
+const NAKSHATRA_PADA_BY_SIGN = {
+  11: [[104, 95, 86], [77, 107, 98], [89, 80, 102]], // Pisces
+  0: [[7, 16, 25], [34, 6, 15], [24, 33, 1]], // Aries
+  1: [[10, 19, 28], [2, 11, 20], [29, 9, 18]], // Taurus
+  2: [[27, 36, 4], [13, 22, 31], [3, 12, 21]], // Gemini
+  3: [[30, 8, 17], [26, 35, 5], [14, 23, 32]], // Cancer
+  4: [[43, 52, 61], [70, 42, 51], [60, 69, 37]], // Leo
+  5: [[46, 55, 64], [38, 47, 56], [54, 45, 65]], // Virgo
+  6: [[57, 48, 39], [67, 58, 49], [40, 72, 63]], // Libra
+  7: [[68, 59, 50], [41, 71, 62], [53, 44, 66]], // Scorpio
+  8: [[73, 105, 96], [87, 78, 106], [97, 88, 79]], // Sagittarius
+  9: [[90, 81, 101], [92, 83, 74], [100, 91, 82]], // Capricorn
+  10: [[93, 84, 75], [103, 94, 85], [76, 99, 108]] // Aquarius
+};
+
+const DUSTHANA_HOUSES = new Set([6, 8, 12]);
 
 const NUMBER_ATTRIBUTES = {
   1: {
@@ -163,15 +188,50 @@ const PLANET_BY_NUMBER = {
   9: "Mars"
 };
 
+const BAD_NUMBERS = new Set([
+  7, 9, 11, 13, 15, 17, 18, 25, 26, 29, 31, 34, 35, 36,
+  38, 40, 43, 44, 46, 47, 48, 49, 52, 53, 58, 61, 62,
+  63, 65, 67, 70, 71, 76, 81, 87, 94, 98, 102, 104, 106, 107
+]);
+
+const DEFAULT_HINT = "Enter full name and date of birth to generate your Tanktrik numerology report.";
+const LAGNA_METHOD_DEFAULT = "month_name";
+const LAGNA_METHOD_LABELS = {
+  month_name: "1-January-2025",
+  numeric: "1-1-2025"
+};
+
+const PADA_SIGN_MAP = buildPadaSignMap();
+let identifierHelperSeq = 0;
+
 const el = {
   form: document.getElementById("calcForm"),
   name: document.getElementById("nameInput"),
   dob: document.getElementById("dobInput"),
   endDate: document.getElementById("endDateInput"),
+  lagnaMethod: document.getElementById("lagnaMethodInput"),
+  identifierBlock: document.getElementById("identifierBlock"),
+  identifierAccordionToggle: document.getElementById("identifierAccordionToggle"),
+  identifierAccordionPanel: document.getElementById("identifierAccordionPanel"),
+  identifierCountBadge: document.getElementById("identifierCountBadge"),
+  addIdentifierBtn: document.getElementById("addIdentifierBtn"),
+  exportPdfBtn: document.getElementById("exportPdfBtn"),
+  identifierRows: document.getElementById("identifierRows"),
   hint: document.getElementById("formHint"),
   reset: document.getElementById("resetBtn"),
   dashboard: document.getElementById("dashboard"),
+  printReportHead: document.getElementById("printReportHead"),
+  printReportMeta: document.getElementById("printReportMeta"),
   summaryGrid: document.getElementById("summaryGrid"),
+  insightSection: document.getElementById("insightSection"),
+  insightGrid: document.getElementById("insightGrid"),
+  optionalReportSection: document.getElementById("optionalReportSection"),
+  optionalReportTableBody: document.querySelector("#optionalReportTable tbody"),
+  nakshatraSection: document.getElementById("nakshatraSection"),
+  nakshatraGrid: document.getElementById("nakshatraGrid"),
+  lagnaInfo: document.getElementById("lagnaInfo"),
+  nakshatraUnmapped: document.getElementById("nakshatraUnmapped"),
+  nakshatraHouseTableBody: document.querySelector("#nakshatraHouseTable tbody"),
   coreBreakdown: document.getElementById("coreBreakdown"),
   pyramidChart: document.getElementById("pyramidChart"),
   nameChartGrid: document.getElementById("nameChartGrid"),
@@ -180,20 +240,35 @@ const el = {
   shivaMayaGrid: document.getElementById("shivaMayaGrid"),
   yearTimeline: document.getElementById("yearTimeline"),
   yearTableBody: document.querySelector("#yearTable tbody"),
-  attributeCards: document.getElementById("attributeCards"),
   attributeTableBody: document.querySelector("#attributeTable tbody"),
   nameValues: document.getElementById("nameValues"),
-  nameTrace: document.getElementById("nameTrace")
+  nameTrace: document.getElementById("nameTrace"),
+  destinyValues: document.getElementById("destinyValues"),
+  chaldeanDestinyValues: document.getElementById("chaldeanDestinyValues"),
+  lagnaDestinyValues: document.getElementById("lagnaDestinyValues"),
+  coreAuditTrail: document.getElementById("coreAuditTrail"),
+  identifierTrace: document.getElementById("identifierTrace"),
+  auditPyramid: document.getElementById("auditPyramid")
 };
 
 init();
 
 function init() {
+  removeLegacyAttributeCards();
+  setupIdentifierRows();
+  setupIdentifierAccordion();
+  setExportPdfEnabled(false);
   el.endDate.value = formatIsoDate(new Date());
+  if (el.lagnaMethod) {
+    el.lagnaMethod.value = LAGNA_METHOD_DEFAULT;
+  }
   el.form.addEventListener("submit", handleSubmit);
   el.reset.addEventListener("click", handleReset);
-  el.name.addEventListener("input", () => setHint("Enter your name and date of birth to generate a complete Tanktrik numerology report."));
-  el.dob.addEventListener("input", () => setHint("Enter your name and date of birth to generate a complete Tanktrik numerology report."));
+  if (el.exportPdfBtn) {
+    el.exportPdfBtn.addEventListener("click", handleExportPdf);
+  }
+  el.name.addEventListener("input", () => setHint(DEFAULT_HINT));
+  el.dob.addEventListener("input", () => setHint(DEFAULT_HINT));
 }
 
 function handleSubmit(event) {
@@ -222,11 +297,14 @@ function handleSubmit(event) {
   const nameTotals = nameNumber(nameData.nums, true);
   const pyramid = pyramidRows(nameData.nums, false);
   const pyramidNumber = pyramid.length ? pyramid[pyramid.length - 1][0] : 0;
+  const selectedLagnaMethod = getLagnaMethodSelection();
   const destiny = destinyNumber(dob, true);
   const ruling = rulingNumber(dob, true);
   const rulingSingle = reduceToDigit(dob.getDate(), false);
   const chMonth = chaldeanMonthNumber(dob.getMonth() + 1, true);
-  const chDestiny = destinyNumberChaldean(dob, true);
+  const chDestinyData = destinyNumberChaldeanDetail(dob, true);
+  const chDestiny = chDestinyData.value;
+  const lagnaDestinyData = destinyNumberChaldeanLagnaDetail(dob, selectedLagnaMethod, true);
   const chart = nameChartTrace(rawName);
   const signLetters = buildNameChartSignContents(chart.trace);
   const yearMap = buildNameYearMapping(rawName, dob, endDate);
@@ -234,6 +312,7 @@ function handleSubmit(event) {
   const loShuGrid = loshuGridFromCounts(loShuCounts);
   const loShuMissing = loshuMissingNumbers(loShuCounts);
   const shivaMaya = shivaMayaChakra3x3(rulingSingle);
+  const identifierReports = buildIdentifierReports(collectOptionalIdentifiers());
   const attributeRows = buildAttributeRows({
     nameNumber: nameTotals.reduced,
     pyramidNumber,
@@ -251,8 +330,19 @@ function handleSubmit(event) {
     timelineCount: yearMap.rows.length
   });
 
-  renderAttributeCards(attributeRows);
+  const analysisReports = renderAnalysisTable({
+    nameData,
+    nameTotals,
+    pyramid,
+    identifierReports
+  });
+  const nakshatraSummary = renderNakshatraHouseSection(lagnaDestinyData, analysisReports);
   renderAttributeTable(attributeRows);
+  renderInsightCards({
+    analysisReports,
+    attributeRows,
+    nakshatraSummary
+  });
 
   renderCoreBreakdown({
     nameData,
@@ -273,17 +363,60 @@ function handleSubmit(event) {
   renderMatrix(el.shivaMayaGrid, shivaMaya, (value) => String(value));
   renderTimeline(yearMap.rows);
   renderYearTable(yearMap.rows);
-  renderTrace(nameData, chart.trace);
+  renderTrace({
+    nameData,
+    trace: chart.trace,
+    nameTotals,
+    destiny,
+    ruling,
+    chMonth,
+    chDestiny,
+    chDestinyData,
+    lagnaDestinyData,
+    analysisReports,
+    identifierReports,
+    pyramid,
+    nakshatraSummary
+  });
 
   el.dashboard.hidden = false;
-  setHint(`Report generated for ${nameData.clean}.`);
+  updatePrintReportMeta(nameData.clean, dob, endDate, selectedLagnaMethod);
+  setExportPdfEnabled(true);
+  setHint(`Report generated for ${nameData.clean}.`, false, true);
 }
 
 function handleReset() {
   el.form.reset();
   el.endDate.value = formatIsoDate(new Date());
+  if (el.lagnaMethod) {
+    el.lagnaMethod.value = LAGNA_METHOD_DEFAULT;
+  }
   el.dashboard.hidden = true;
   el.summaryGrid.innerHTML = "";
+  if (el.insightSection) {
+    el.insightSection.hidden = true;
+  }
+  if (el.insightGrid) {
+    el.insightGrid.innerHTML = "";
+  }
+  el.optionalReportSection.hidden = true;
+  el.optionalReportTableBody.innerHTML = "";
+  if (el.nakshatraSection) {
+    el.nakshatraSection.hidden = true;
+  }
+  if (el.nakshatraGrid) {
+    el.nakshatraGrid.innerHTML = "";
+  }
+  if (el.lagnaInfo) {
+    el.lagnaInfo.textContent = "";
+  }
+  if (el.nakshatraUnmapped) {
+    el.nakshatraUnmapped.hidden = true;
+    el.nakshatraUnmapped.textContent = "";
+  }
+  if (el.nakshatraHouseTableBody) {
+    el.nakshatraHouseTableBody.innerHTML = "";
+  }
   el.coreBreakdown.innerHTML = "";
   el.pyramidChart.innerHTML = "";
   el.nameChartGrid.innerHTML = "";
@@ -292,16 +425,717 @@ function handleReset() {
   el.shivaMayaGrid.innerHTML = "";
   el.yearTimeline.innerHTML = "";
   el.yearTableBody.innerHTML = "";
-  el.attributeCards.innerHTML = "";
   el.attributeTableBody.innerHTML = "";
   el.nameValues.textContent = "";
   el.nameTrace.innerHTML = "";
-  setHint("Enter your name and date of birth to generate a complete Tanktrik numerology report.");
+  if (el.destinyValues) {
+    el.destinyValues.textContent = "";
+  }
+  if (el.chaldeanDestinyValues) {
+    el.chaldeanDestinyValues.textContent = "";
+  }
+  if (el.lagnaDestinyValues) {
+    el.lagnaDestinyValues.textContent = "";
+  }
+  if (el.coreAuditTrail) {
+    el.coreAuditTrail.innerHTML = "";
+  }
+  if (el.identifierTrace) {
+    el.identifierTrace.innerHTML = "";
+  }
+  if (el.auditPyramid) {
+    el.auditPyramid.innerHTML = "";
+  }
+  if (el.printReportHead) {
+    el.printReportHead.hidden = true;
+  }
+  if (el.printReportMeta) {
+    el.printReportMeta.textContent = "";
+  }
+  setExportPdfEnabled(false);
+  el.identifierRows.innerHTML = "";
+  appendIdentifierRow("mobile");
+  setIdentifierAccordionState(false, true);
+  updateIdentifierCountBadge();
+  setHint(DEFAULT_HINT);
 }
 
-function setHint(message, isError = false) {
+function setHint(message, isError = false, isSuccess = false) {
   el.hint.textContent = message;
   el.hint.classList.toggle("is-error", isError);
+  el.hint.classList.toggle("is-success", !isError && isSuccess);
+}
+
+function setExportPdfEnabled(enabled) {
+  if (!el.exportPdfBtn) {
+    return;
+  }
+  el.exportPdfBtn.disabled = !enabled;
+  el.exportPdfBtn.setAttribute("aria-disabled", String(!enabled));
+}
+
+function updatePrintReportMeta(name, dob, endDate, lagnaMethod) {
+  if (!el.printReportHead || !el.printReportMeta) {
+    return;
+  }
+  const generated = formatDisplayDate(new Date());
+  const dobText = formatDisplayDate(dob);
+  const endDateText = formatDisplayDate(endDate);
+  const methodText = lagnaMethodLabel(lagnaMethod);
+  el.printReportMeta.textContent = `Name: ${name} | Date of Birth: ${dobText} | Analysis End Date: ${endDateText} | Lagna Method: ${methodText} | Generated On: ${generated}`;
+  el.printReportHead.hidden = false;
+}
+
+function handleExportPdf() {
+  if (el.dashboard.hidden) {
+    setHint("Generate the report before exporting PDF.", true);
+    return;
+  }
+  setHint("Opening print dialog. Choose 'Save as PDF' and paper size A4.", false, true);
+  window.print();
+}
+
+function getLagnaMethodSelection() {
+  if (!el.lagnaMethod) {
+    return LAGNA_METHOD_DEFAULT;
+  }
+  const selected = el.lagnaMethod.value;
+  return LAGNA_METHOD_LABELS[selected] ? selected : LAGNA_METHOD_DEFAULT;
+}
+
+function removeLegacyAttributeCards() {
+  document.querySelectorAll(".attribute-grid").forEach((node) => node.remove());
+  document.querySelectorAll(".attribute-card").forEach((node) => node.remove());
+}
+
+function setupIdentifierRows() {
+  appendIdentifierRow("mobile");
+  updateIdentifierCountBadge();
+
+  el.addIdentifierBtn.addEventListener("click", () => {
+    appendIdentifierRow("custom");
+    updateIdentifierCountBadge();
+  });
+
+  el.identifierRows.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!target.classList.contains("identifier-value")) {
+      return;
+    }
+    const row = target.closest(".identifier-row");
+    const raw = target.value;
+    const clean = sanitizeIdentifierToken(target.value);
+    if (clean !== target.value) {
+      target.value = clean;
+    }
+
+    if (row) {
+      if (raw !== clean) {
+        setIdentifierRowHint(
+          row,
+          "Unsupported characters removed. Use letters and digits only.",
+          true
+        );
+      } else {
+        setIdentifierRowHint(row, "Letters A-Z and digits 0-9 only.", false);
+      }
+    }
+
+    updateIdentifierCountBadge();
+  });
+
+  el.identifierRows.addEventListener("focusin", (event) => {
+    const target = event.target;
+    if (!target.classList.contains("identifier-value")) {
+      return;
+    }
+    const row = target.closest(".identifier-row");
+    if (!row) {
+      return;
+    }
+    row.classList.add("is-focused");
+    if (!row.classList.contains("is-invalid")) {
+      setIdentifierRowHint(row, "Letters A-Z and digits 0-9 only.", false);
+    }
+  });
+
+  el.identifierRows.addEventListener("focusout", (event) => {
+    const target = event.target;
+    if (!target.classList.contains("identifier-value")) {
+      return;
+    }
+    const row = target.closest(".identifier-row");
+    if (!row) {
+      return;
+    }
+    if (event.relatedTarget && row.contains(event.relatedTarget)) {
+      return;
+    }
+    row.classList.remove("is-focused");
+  });
+
+  el.identifierRows.addEventListener("click", (event) => {
+    const removeBtn = event.target.closest(".identifier-remove");
+    if (!removeBtn) {
+      return;
+    }
+    const row = removeBtn.closest(".identifier-row");
+    if (row) {
+      row.remove();
+    }
+    if (!el.identifierRows.querySelector(".identifier-row")) {
+      appendIdentifierRow("mobile");
+    }
+    updateIdentifierCountBadge();
+  });
+
+  el.identifierRows.addEventListener("change", () => {
+    updateIdentifierCountBadge();
+  });
+}
+
+function appendIdentifierRow(type = "custom", initialValue = "") {
+  const row = document.createElement("div");
+  row.className = "identifier-row";
+  const helperId = `identifierHelper${identifierHelperSeq += 1}`;
+
+  const options = IDENTIFIER_TYPES.map((item) => {
+    const selected = item.value === type ? " selected" : "";
+    return `<option value="${item.value}"${selected}>${item.label}</option>`;
+  }).join("");
+
+  row.innerHTML = `
+    <label class="form-field identifier-type-field">
+      <span>Type</span>
+      <select class="identifier-type" aria-label="Identifier type">${options}</select>
+    </label>
+    <label class="form-field identifier-value-field">
+      <span>Value</span>
+      <input
+        class="identifier-value"
+        type="text"
+        value="${sanitizeIdentifierToken(initialValue)}"
+        placeholder="Letters and numbers only"
+        aria-describedby="${helperId}"
+        autocomplete="off"
+        inputmode="text"
+      />
+      <p id="${helperId}" class="identifier-inline-helper" aria-live="polite">Letters A-Z and digits 0-9 only.</p>
+    </label>
+    <button type="button" class="identifier-remove identifier-remove-icon" aria-label="Remove identifier">
+      <span aria-hidden="true">&times;</span>
+    </button>
+  `;
+
+  el.identifierRows.appendChild(row);
+  updateIdentifierCountBadge();
+}
+
+function setIdentifierRowHint(row, message, isInvalid) {
+  const helper = row.querySelector(".identifier-inline-helper");
+  if (helper) {
+    helper.textContent = message;
+  }
+  row.classList.toggle("is-invalid", Boolean(isInvalid));
+}
+
+function updateIdentifierCountBadge() {
+  if (!el.identifierCountBadge || !el.identifierRows) {
+    return;
+  }
+  const count = [...el.identifierRows.querySelectorAll(".identifier-value")]
+    .map((input) => sanitizeIdentifierToken(input.value).trim())
+    .filter(Boolean)
+    .length;
+
+  el.identifierCountBadge.textContent = String(count);
+  el.identifierCountBadge.classList.toggle("has-value", count > 0);
+}
+
+function setupIdentifierAccordion() {
+  if (!el.identifierBlock || !el.identifierAccordionToggle || !el.identifierAccordionPanel) {
+    return;
+  }
+
+  el.identifierAccordionToggle.addEventListener("click", () => {
+    const shouldOpen = !el.identifierBlock.classList.contains("is-open");
+    setIdentifierAccordionState(shouldOpen);
+  });
+
+  setIdentifierAccordionState(false, true);
+}
+
+function setIdentifierAccordionState(isOpen, immediate = false) {
+  if (!el.identifierBlock || !el.identifierAccordionToggle || !el.identifierAccordionPanel) {
+    return;
+  }
+
+  el.identifierAccordionToggle.setAttribute("aria-expanded", String(isOpen));
+
+  if (isOpen) {
+    el.identifierAccordionPanel.hidden = false;
+    if (immediate) {
+      el.identifierBlock.classList.add("is-open");
+      return;
+    }
+    requestAnimationFrame(() => {
+      el.identifierBlock.classList.add("is-open");
+    });
+    return;
+  }
+
+  el.identifierBlock.classList.remove("is-open");
+  if (immediate) {
+    el.identifierAccordionPanel.hidden = true;
+    return;
+  }
+
+  let done = false;
+  const finalize = () => {
+    if (done) {
+      return;
+    }
+    done = true;
+    if (!el.identifierBlock.classList.contains("is-open")) {
+      el.identifierAccordionPanel.hidden = true;
+    }
+    el.identifierAccordionPanel.removeEventListener("transitionend", onTransitionEnd);
+  };
+
+  const onTransitionEnd = (event) => {
+    if (event.target !== el.identifierAccordionPanel) {
+      return;
+    }
+    finalize();
+  };
+
+  el.identifierAccordionPanel.addEventListener("transitionend", onTransitionEnd);
+  window.setTimeout(finalize, 320);
+}
+
+function sanitizeIdentifierToken(value) {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function collectOptionalIdentifiers() {
+  const rows = [...el.identifierRows.querySelectorAll(".identifier-row")];
+  return rows
+    .map((row) => {
+      const select = row.querySelector(".identifier-type");
+      const input = row.querySelector(".identifier-value");
+      const clean = sanitizeIdentifierToken(input.value);
+      input.value = clean;
+      if (!clean) {
+        return null;
+      }
+      return {
+        type: select.value,
+        label: select.options[select.selectedIndex].textContent,
+        clean
+      };
+    })
+    .filter(Boolean);
+}
+
+function chaldeanValuesFromIdentifier(cleanToken) {
+  const token = sanitizeIdentifierToken(cleanToken);
+  const values = [];
+  let i = 0;
+
+  while (i < token.length) {
+    const ch = token[i];
+
+    if (ch >= "0" && ch <= "9") {
+      if (ch === "0") {
+        let j = i;
+        while (j < token.length && token[j] === "0") {
+          j += 1;
+        }
+        const zeroRun = j - i;
+        values.push(zeroRun >= 2 ? 9 : 0);
+        i = j;
+        continue;
+      }
+      values.push(Number(ch));
+      i += 1;
+      continue;
+    }
+
+    const mapped = CHALDEAN[ch];
+    if (mapped !== undefined) {
+      values.push(mapped);
+    }
+    i += 1;
+  }
+
+  return values;
+}
+
+function buildIdentifierReports(entries) {
+  return entries.map((entry) => {
+    const values = chaldeanValuesFromIdentifier(entry.clean);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const reduced = reduceToDigit(total, true);
+    const pyramid = pyramidRows(values, false);
+    const apex = pyramid.length ? pyramid[pyramid.length - 1][0] : "-";
+    const pyramidRowsCompact = pyramid.map((row) => row.join("")).join(" / ");
+    const pyramidTwoDigit = pyramid.length >= 2 && pyramid[pyramid.length - 2].length >= 2
+      ? Number(`${pyramid[pyramid.length - 2][0]}${pyramid[pyramid.length - 2][1]}`)
+      : null;
+    const pyramidSingleDigit = pyramid.length ? pyramid[pyramid.length - 1][0] : null;
+    return {
+      label: entry.label,
+      clean: entry.clean,
+      values,
+      total,
+      reduced,
+      apex,
+      pyramidRows: pyramid,
+      pyramidRowsCompact,
+      pyramidTwoDigit,
+      pyramidSingleDigit
+    };
+  });
+}
+
+function buildPrimaryNameAnalysis(nameData, nameTotals, pyramid) {
+  const apex = pyramid.length ? pyramid[pyramid.length - 1][0] : "-";
+  const pyramidRowsCompact = pyramid.map((row) => row.join("")).join(" / ");
+  const pyramidTwoDigit = pyramid.length >= 2 && pyramid[pyramid.length - 2].length >= 2
+    ? Number(`${pyramid[pyramid.length - 2][0]}${pyramid[pyramid.length - 2][1]}`)
+    : null;
+  const pyramidSingleDigit = pyramid.length ? pyramid[pyramid.length - 1][0] : null;
+  return {
+    label: "Name (Primary)",
+    clean: nameData.clean,
+    values: nameData.nums,
+    total: nameTotals.total,
+    reduced: nameTotals.reduced,
+    apex,
+    pyramidRows: pyramid,
+    pyramidRowsCompact,
+    pyramidTwoDigit,
+    pyramidSingleDigit
+  };
+}
+
+function renderAnalysisTable({ nameData, nameTotals, pyramid, identifierReports }) {
+  el.optionalReportTableBody.innerHTML = "";
+  const primaryRow = buildPrimaryNameAnalysis(nameData, nameTotals, pyramid);
+  const rows = [primaryRow, ...identifierReports];
+
+  rows.forEach((report) => {
+    const tr = document.createElement("tr");
+    const chaldeanBad = BAD_NUMBERS.has(report.total);
+    const pyramidTwoDigitBad = report.pyramidTwoDigit !== null && BAD_NUMBERS.has(report.pyramidTwoDigit);
+    const pyramidSingleBad = report.pyramidSingleDigit !== null && BAD_NUMBERS.has(report.pyramidSingleDigit);
+    const hasRisk = chaldeanBad || pyramidTwoDigitBad || pyramidSingleBad;
+    if (hasRisk) {
+      tr.classList.add("analysis-risk-row");
+    }
+    const badge = (isBad) => (isBad ? `<span class="flag-bad">Yes</span>` : `<span class="flag-good">No</span>`);
+    tr.innerHTML = `
+      <td>${report.label}</td>
+      <td>${report.clean}</td>
+      <td class="mono-cell values-cell">${report.values.join(", ")}</td>
+      <td>${report.total}</td>
+      <td>${report.reduced}</td>
+      <td class="bad-check-cell">
+        <div class="bad-check-row"><span class="bad-check-label">Chaldean (${report.total})</span>${badge(chaldeanBad)}</div>
+        <div class="bad-check-row"><span class="bad-check-label">Pyramid 2D (${report.pyramidTwoDigit ?? "-"})</span>${badge(pyramidTwoDigitBad)}</div>
+        <div class="bad-check-row"><span class="bad-check-label">Pyramid 1D (${report.pyramidSingleDigit ?? "-"})</span>${badge(pyramidSingleBad)}</div>
+      </td>
+      <td>${report.apex}</td>
+      <td class="mono-cell pyramid-sequence">${formatPyramidSequence(report.pyramidRowsCompact)}</td>
+    `;
+    el.optionalReportTableBody.appendChild(tr);
+  });
+
+  el.optionalReportSection.hidden = false;
+  return rows;
+}
+
+function formatPyramidSequence(sequence) {
+  if (!sequence) {
+    return "-";
+  }
+  return sequence
+    .split(" / ")
+    .map((part) => `<span>${part}</span>`)
+    .join('<span class="sequence-separator">&rarr;</span>');
+}
+
+function digitSum(number) {
+  return String(Math.abs(Math.trunc(number)))
+    .split("")
+    .map(Number)
+    .reduce((sum, digit) => sum + digit, 0);
+}
+
+function normalizeKundliRange(value) {
+  const numeric = Math.trunc(Number(value));
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return null;
+  }
+
+  let normalized = Math.abs(numeric);
+  while (normalized > 108) {
+    normalized = digitSum(normalized);
+  }
+  while (normalized < 10) {
+    normalized += 9;
+  }
+  return normalized;
+}
+
+function buildPadaSignMap() {
+  const map = new Map();
+  Object.entries(NAKSHATRA_PADA_BY_SIGN).forEach(([signIndex, rows]) => {
+    rows.flat().forEach((value) => {
+      map.set(Number(value), Number(signIndex));
+    });
+  });
+  return map;
+}
+
+function normalizePadaNumber(value) {
+  const normalized = normalizeKundliRange(value);
+  return normalized !== null && PADA_SIGN_MAP.has(normalized) ? normalized : null;
+}
+
+function houseFromLagna(lagnaSignIndex, targetSignIndex) {
+  return ((targetSignIndex - lagnaSignIndex + 12) % 12) + 1;
+}
+
+function buildHousePlacements(reports, lagnaSignIndex) {
+  const placements = [];
+  const unmapped = [];
+  const components = [
+    { key: "total", label: "Chaldean" },
+    { key: "pyramidTwoDigit", label: "Pyramid 2D" },
+    { key: "pyramidSingleDigit", label: "Pyramid 1D" }
+  ];
+
+  reports.forEach((report, reportIndex) => {
+    components.forEach((component, componentIndex) => {
+      const raw = report[component.key];
+      if (raw === null || raw === undefined || raw === "") {
+        unmapped.push({
+          category: report.label,
+          component: component.label,
+          value: raw,
+          reason: "Not available"
+        });
+        return;
+      }
+
+      const normalized = normalizePadaNumber(raw);
+      if (normalized === null) {
+        unmapped.push({
+          category: report.label,
+          component: component.label,
+          value: raw,
+          reason: "Outside 1-108 map"
+        });
+        return;
+      }
+
+      const rawValue = Math.trunc(Number(raw));
+      const signIndex = PADA_SIGN_MAP.get(normalized);
+      const house = houseFromLagna(lagnaSignIndex, signIndex);
+      placements.push({
+        sortIndex: reportIndex * 3 + componentIndex,
+        category: report.label,
+        component: component.label,
+        rawValue,
+        value: normalized,
+        wasAdjusted: rawValue !== normalized,
+        signIndex,
+        sign: ZODIAC_SIGNS[signIndex],
+        house,
+        isDusthana: DUSTHANA_HOUSES.has(house)
+      });
+    });
+  });
+
+  return { placements, unmapped };
+}
+
+function renderNakshatraHouseSection(lagnaDestiny, reports) {
+  if (!el.nakshatraSection || !el.nakshatraGrid || !el.lagnaInfo || !el.nakshatraHouseTableBody) {
+    return null;
+  }
+
+  const lagnaTotalRaw = lagnaDestiny ? lagnaDestiny.total : null;
+  const lagnaMethod = lagnaDestiny ? lagnaDestiny.methodLabel : lagnaMethodLabel(LAGNA_METHOD_DEFAULT);
+  const lagnaToken = lagnaDestiny ? lagnaDestiny.token : "-";
+
+  const lagnaValue = normalizePadaNumber(lagnaTotalRaw);
+  const lagnaRawNumber = lagnaTotalRaw !== null && lagnaTotalRaw !== undefined
+    ? Math.trunc(Number(lagnaTotalRaw))
+    : null;
+  const lagnaAdjusted = lagnaRawNumber !== null && lagnaRawNumber !== lagnaValue;
+  const lagnaTotalText = lagnaAdjusted ? `${lagnaRawNumber} -> ${lagnaValue}` : `${lagnaRawNumber ?? "-"}`;
+  if (lagnaValue === null) {
+    el.nakshatraSection.hidden = false;
+    el.lagnaInfo.textContent = `Selected lagna method ${lagnaMethod} generated total ${lagnaRawNumber ?? "-"} (token: ${lagnaToken}), which could not be normalized to the 10-108 kundli range.`;
+    el.nakshatraGrid.innerHTML = "";
+    el.nakshatraHouseTableBody.innerHTML = `<tr><td colspan="6">No house placements available.</td></tr>`;
+    if (el.nakshatraUnmapped) {
+      el.nakshatraUnmapped.hidden = true;
+      el.nakshatraUnmapped.textContent = "";
+    }
+    return {
+      method: lagnaDestiny ? lagnaDestiny.method : LAGNA_METHOD_DEFAULT,
+      methodLabel: lagnaMethod,
+      token: lagnaToken,
+      lagnaRawTotal: lagnaRawNumber,
+      lagnaAdjusted: false,
+      lagnaValue: null,
+      lagnaSignIndex: null,
+      placements: [],
+      unmapped: []
+    };
+  }
+
+  const lagnaSignIndex = PADA_SIGN_MAP.get(lagnaValue);
+  const { placements, unmapped } = buildHousePlacements(reports, lagnaSignIndex);
+
+  renderNakshatraGrid(lagnaSignIndex, placements);
+  renderNakshatraHouseTable(placements);
+
+  el.lagnaInfo.textContent = `Lagna: ${ZODIAC_SIGNS[lagnaSignIndex]} (method ${lagnaMethod}, token ${lagnaToken}, total ${lagnaTotalText}). Kundli range normalization uses 10-108; values above 108 are reduced. Houses 6, 8, and 12 are highlighted in red.`;
+
+  if (el.nakshatraUnmapped) {
+    if (unmapped.length) {
+      const details = unmapped
+        .map((item) => `${item.category} ${item.component} (${item.value ?? "-"})`)
+        .join("; ");
+      el.nakshatraUnmapped.hidden = false;
+      el.nakshatraUnmapped.textContent = `Unmapped values: ${details}.`;
+    } else {
+      el.nakshatraUnmapped.hidden = true;
+      el.nakshatraUnmapped.textContent = "";
+    }
+  }
+
+  el.nakshatraSection.hidden = false;
+  return {
+    method: lagnaDestiny ? lagnaDestiny.method : LAGNA_METHOD_DEFAULT,
+    methodLabel: lagnaMethod,
+    token: lagnaToken,
+    lagnaRawTotal: lagnaRawNumber,
+    lagnaAdjusted,
+    lagnaValue,
+    lagnaSignIndex,
+    placements,
+    unmapped
+  };
+}
+
+function formatPadaNumber(value) {
+  const numeric = Math.trunc(Number(value));
+  if (!Number.isFinite(numeric)) {
+    return String(value);
+  }
+  if (numeric >= 100) {
+    return String(numeric);
+  }
+  return String(numeric).padStart(2, "0");
+}
+
+function renderNakshatraGrid(lagnaSignIndex, placements) {
+  const placementsBySign = Array.from({ length: 12 }, () => []);
+  placements.forEach((placement) => {
+    placementsBySign[placement.signIndex].push(placement);
+  });
+
+  el.nakshatraGrid.innerHTML = "";
+  SOUTH_INDIAN_LAYOUT.flat().forEach((signIndex) => {
+    if (signIndex === null) {
+      const gap = document.createElement("div");
+      gap.className = "nakshatra-gap";
+      gap.setAttribute("aria-hidden", "true");
+      el.nakshatraGrid.appendChild(gap);
+      return;
+    }
+
+    const house = houseFromLagna(lagnaSignIndex, signIndex);
+    const signPlacements = placementsBySign[signIndex];
+    const hitValues = new Set(signPlacements.map((item) => item.value));
+    const isLagna = signIndex === lagnaSignIndex;
+    const isDusthana = DUSTHANA_HOUSES.has(house);
+
+    const cell = document.createElement("article");
+    cell.className = "nakshatra-cell";
+    if (isLagna) {
+      cell.classList.add("is-lagna");
+    }
+    if (isDusthana) {
+      cell.classList.add("is-dusthana");
+    }
+
+    const padaNumbers = (NAKSHATRA_PADA_BY_SIGN[signIndex] || [])
+      .flat()
+      .map((number) => {
+        const hit = hitValues.has(number);
+        const classes = [
+          "nakshatra-pada",
+          hit ? "is-hit" : "",
+          hit && isDusthana ? "is-dusthana" : ""
+        ].filter(Boolean).join(" ");
+        return `<span class="${classes}">${formatPadaNumber(number)}</span>`;
+      }).join("");
+
+    const hits = signPlacements
+      .sort((a, b) => a.sortIndex - b.sortIndex)
+      .map((placement) => {
+        const hitClass = placement.isDusthana ? "nakshatra-hit is-dusthana" : "nakshatra-hit";
+        const valueText = placement.wasAdjusted
+          ? `${placement.rawValue} -> ${placement.value}`
+          : `${placement.value}`;
+        return `<li class="${hitClass}">${placement.category} | ${placement.component}: ${valueText}</li>`;
+      }).join("");
+
+    cell.innerHTML = `
+      <div class="nakshatra-cell-head">
+        <span class="nakshatra-sign">${ZODIAC_SIGNS[signIndex]}</span>
+        <span class="nakshatra-house">House ${house}${isLagna ? " • Lagna" : ""}</span>
+      </div>
+      <div class="nakshatra-pada-grid">${padaNumbers}</div>
+      ${hits ? `<ul class="nakshatra-hits">${hits}</ul>` : `<p class="nakshatra-empty">No mapped components</p>`}
+    `;
+
+    el.nakshatraGrid.appendChild(cell);
+  });
+}
+
+function renderNakshatraHouseTable(placements) {
+  el.nakshatraHouseTableBody.innerHTML = "";
+
+  if (!placements.length) {
+    el.nakshatraHouseTableBody.innerHTML = `<tr><td colspan="6">No house placements available.</td></tr>`;
+    return;
+  }
+
+  placements
+    .slice()
+    .sort((a, b) => a.sortIndex - b.sortIndex)
+    .forEach((placement) => {
+      const tr = document.createElement("tr");
+      if (placement.isDusthana) {
+        tr.classList.add("house-row-dusthana");
+      }
+      tr.innerHTML = `
+        <td>${placement.category}</td>
+        <td>${placement.component}</td>
+        <td>${placement.wasAdjusted ? `${placement.rawValue} -> ${placement.value}` : `${placement.value}`}</td>
+        <td>${placement.sign}</td>
+        <td>${placement.house}</td>
+        <td>${placement.isDusthana ? '<span class="house-flag bad">6/8/12</span>' : '<span class="house-flag good">Clear</span>'}</td>
+      `;
+      el.nakshatraHouseTableBody.appendChild(tr);
+    });
 }
 
 function cleanName(value) {
@@ -380,12 +1214,72 @@ function chaldeanMonthNumber(month, keepMasters = true) {
   return chaldeanWordNumber(MONTH_NAMES[month - 1], keepMasters);
 }
 
-function destinyNumberChaldean(dob, keepMasters = true) {
-  const daySum = String(dob.getDate()).padStart(2, "0").split("").map(Number).reduce((a, b) => a + b, 0);
-  const yearSum = String(dob.getFullYear()).split("").map(Number).reduce((a, b) => a + b, 0);
+function lagnaMethodLabel(method) {
+  return LAGNA_METHOD_LABELS[method] || LAGNA_METHOD_LABELS[LAGNA_METHOD_DEFAULT];
+}
+
+function buildLagnaDateToken(dob, method = LAGNA_METHOD_DEFAULT) {
+  const day = String(dob.getDate());
+  const monthNumber = String(dob.getMonth() + 1);
+  const monthName = MONTH_NAMES[dob.getMonth()];
+  const year = String(dob.getFullYear());
+  return method === "numeric"
+    ? `${day}-${monthNumber}-${year}`
+    : `${day}-${monthName}-${year}`;
+}
+
+function chaldeanValuesFromDateToken(token) {
+  const values = [];
+  [...token.toUpperCase()].forEach((ch) => {
+    if (ch >= "0" && ch <= "9") {
+      values.push(Number(ch));
+      return;
+    }
+    if (CHALDEAN[ch] !== undefined) {
+      values.push(CHALDEAN[ch]);
+    }
+  });
+  return values;
+}
+
+function destinyNumberChaldeanLagnaDetail(dob, method = LAGNA_METHOD_DEFAULT, keepMasters = true) {
+  const normalizedMethod = LAGNA_METHOD_LABELS[method] ? method : LAGNA_METHOD_DEFAULT;
+  const token = buildLagnaDateToken(dob, normalizedMethod);
+  const values = chaldeanValuesFromDateToken(token);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return {
+    method: normalizedMethod,
+    methodLabel: lagnaMethodLabel(normalizedMethod),
+    token,
+    values,
+    total,
+    value: reduceToDigit(total, keepMasters)
+  };
+}
+
+function destinyNumberChaldeanDetail(dob, keepMasters = true) {
+  const dayDigits = String(dob.getDate()).split("").map(Number);
+  const daySum = dayDigits.reduce((a, b) => a + b, 0);
+  const yearDigits = String(dob.getFullYear()).split("").map(Number);
+  const yearSum = yearDigits.reduce((a, b) => a + b, 0);
+  const monthName = MONTH_NAMES[dob.getMonth()];
   const monthValue = chaldeanMonthNumber(dob.getMonth() + 1, keepMasters);
   const total = daySum + monthValue + yearSum;
-  return reduceToDigit(total, keepMasters);
+
+  return {
+    dayDigits,
+    daySum,
+    monthName,
+    monthValue,
+    yearDigits,
+    yearSum,
+    total,
+    value: reduceToDigit(total, keepMasters)
+  };
+}
+
+function destinyNumberChaldean(dob, keepMasters = true) {
+  return destinyNumberChaldeanDetail(dob, keepMasters).value;
 }
 
 function pythValue(letter) {
@@ -551,6 +1445,106 @@ function renderSummaryCards(data) {
   });
 }
 
+function renderInsightCards({ analysisReports, attributeRows, nakshatraSummary }) {
+  if (!el.insightSection || !el.insightGrid) {
+    return;
+  }
+
+  const totalChecks = analysisReports.length * 3;
+  let badChecks = 0;
+  const riskyCategories = new Set();
+
+  analysisReports.forEach((report) => {
+    const chaldeanBad = BAD_NUMBERS.has(report.total);
+    const pyramidTwoDigitBad = report.pyramidTwoDigit !== null && BAD_NUMBERS.has(report.pyramidTwoDigit);
+    const pyramidSingleBad = report.pyramidSingleDigit !== null && BAD_NUMBERS.has(report.pyramidSingleDigit);
+    const rowBadCount = Number(chaldeanBad) + Number(pyramidTwoDigitBad) + Number(pyramidSingleBad);
+
+    badChecks += rowBadCount;
+    if (rowBadCount > 0) {
+      riskyCategories.add(report.label);
+    }
+  });
+
+  const lagnaSignIndex = nakshatraSummary && nakshatraSummary.lagnaSignIndex !== null
+    ? nakshatraSummary.lagnaSignIndex
+    : null;
+  const lagnaName = lagnaSignIndex !== null ? ZODIAC_SIGNS[lagnaSignIndex] : "Unavailable";
+  const lagnaValue = nakshatraSummary && nakshatraSummary.lagnaValue !== null
+    ? nakshatraSummary.lagnaValue
+    : "-";
+  const lagnaRawTotal = nakshatraSummary && nakshatraSummary.lagnaRawTotal !== null
+    ? nakshatraSummary.lagnaRawTotal
+    : "-";
+  const lagnaAdjusted = Boolean(nakshatraSummary && nakshatraSummary.lagnaAdjusted);
+  const lagnaMethod = nakshatraSummary && nakshatraSummary.methodLabel
+    ? nakshatraSummary.methodLabel
+    : lagnaMethodLabel(LAGNA_METHOD_DEFAULT);
+  const lagnaToken = nakshatraSummary && nakshatraSummary.token
+    ? nakshatraSummary.token
+    : "-";
+  const dusthanaCount = nakshatraSummary
+    ? nakshatraSummary.placements.filter((placement) => placement.isDusthana).length
+    : 0;
+
+  let overallValue = "Stable";
+  let overallTone = "stable";
+  if (badChecks > 0 || dusthanaCount > 0) {
+    overallValue = "Watch";
+    overallTone = "watch";
+  }
+  if (badChecks >= 3 || dusthanaCount >= 3) {
+    overallValue = "Attention";
+    overallTone = "critical";
+  }
+
+  const primaryRemedy = attributeRows.find((row) => row.type === "Name Signature Number");
+  const categories = [...riskyCategories];
+
+  const cards = [
+    {
+      label: "Overall Signal",
+      value: overallValue,
+      note: `${badChecks} flagged checks out of ${totalChecks}; ${dusthanaCount} placement(s) in houses 6/8/12.`,
+      tone: overallTone
+    },
+    {
+      label: "Immediate Attention",
+      value: categories.length ? `${categories.length} item(s)` : "None",
+      note: categories.length ? categories.join(", ") : "No bad-number triggers detected across analyzed entries.",
+      tone: categories.length ? "critical" : "stable"
+    },
+    {
+      label: "Lagna Context",
+      value: lagnaName,
+      note: `Derived from ${lagnaMethod} token ${lagnaToken} (total ${lagnaAdjusted ? `${lagnaRawTotal} -> ${lagnaValue}` : lagnaValue}).`,
+      tone: dusthanaCount > 0 ? "watch" : "neutral"
+    },
+    {
+      label: "Primary Remedy Focus",
+      value: primaryRemedy ? primaryRemedy.gem : "-",
+      note: primaryRemedy
+        ? `${primaryRemedy.planet} influence | Colors: ${primaryRemedy.colors}`
+        : "No remedy data available.",
+      tone: "neutral"
+    }
+  ];
+
+  el.insightGrid.innerHTML = "";
+  cards.forEach((card) => {
+    const article = document.createElement("article");
+    article.className = `insight-card tone-${card.tone}`;
+    article.innerHTML = `
+      <p class="insight-label">${card.label}</p>
+      <p class="insight-value">${card.value}</p>
+      <p class="insight-note">${card.note}</p>
+    `;
+    el.insightGrid.appendChild(article);
+  });
+
+  el.insightSection.hidden = false;
+}
+
 function renderCoreBreakdown(data) {
   const letterMath = data.nameData.clean
     .split("")
@@ -645,44 +1639,27 @@ function formatNumberList(values) {
   return values.length ? values.join(", ") : "-";
 }
 
-function renderAttributeCards(rows) {
-  el.attributeCards.innerHTML = "";
-  rows.forEach((row) => {
-    const card = document.createElement("article");
-    card.className = "attribute-card";
-    const lookupNote = row.lookup !== row.value ? ` (lookup ${row.lookup})` : "";
-    card.innerHTML = `
-      <h3>${row.type}</h3>
-      <p class="attribute-number">${row.value}${lookupNote}</p>
-      <p><strong>Excellent Matches:</strong> ${formatNumberList(row.excellent)}</p>
-      <p><strong>Supportive Matches:</strong> ${formatNumberList(row.good)}</p>
-      <p><strong>Neutral Matches:</strong> ${formatNumberList(row.neutral)}</p>
-      <p><strong>Challenging Matches:</strong> ${formatNumberList(row.bad)}</p>
-      <p><strong>Primary Gemstone:</strong> ${row.gem}</p>
-      <p><strong>Alternative Gemstone:</strong> ${row.gemAlternative}</p>
-      <p><strong>Favorable Colors:</strong> ${row.colors}</p>
-      <p><strong>Ruling Planet:</strong> ${row.planet}</p>
-    `;
-    el.attributeCards.appendChild(card);
-  });
-}
-
 function renderAttributeTable(rows) {
   el.attributeTableBody.innerHTML = "";
   rows.forEach((row) => {
     const tr = document.createElement("tr");
     const numberCell = row.lookup !== row.value ? `${row.value} (${row.lookup})` : String(row.value);
+    const remedyBits = [
+      `<span><strong>Gem:</strong> ${row.gem}</span>`,
+      row.gemAlternative !== "-" ? `<span><strong>Alt:</strong> ${row.gemAlternative}</span>` : "",
+      `<span><strong>Colors:</strong> ${row.colors}</span>`,
+      `<span><strong>Planet:</strong> ${row.planet}</span>`
+    ].filter(Boolean).join("");
     tr.innerHTML = `
       <td>${row.type}</td>
       <td>${numberCell}</td>
-      <td>${formatNumberList(row.excellent)}</td>
-      <td>${formatNumberList(row.good)}</td>
-      <td>${formatNumberList(row.neutral)}</td>
-      <td>${formatNumberList(row.bad)}</td>
-      <td>${row.gem}</td>
-      <td>${row.gemAlternative}</td>
-      <td>${row.colors}</td>
-      <td>${row.planet}</td>
+      <td class="attribute-match-cell">
+        <span><strong>E:</strong> ${formatNumberList(row.excellent)}</span>
+        <span><strong>G:</strong> ${formatNumberList(row.good)}</span>
+        <span><strong>N:</strong> ${formatNumberList(row.neutral)}</span>
+        <span><strong>C:</strong> ${formatNumberList(row.bad)}</span>
+      </td>
+      <td class="attribute-remedy-cell">${remedyBits}</td>
     `;
     el.attributeTableBody.appendChild(tr);
   });
@@ -800,7 +1777,23 @@ function renderYearTable(rows) {
   });
 }
 
-function renderTrace(nameData, trace) {
+function renderTrace(data) {
+  const {
+    nameData,
+    trace,
+    nameTotals,
+    destiny,
+    ruling,
+    chMonth,
+    chDestiny,
+    chDestinyData,
+    lagnaDestinyData,
+    analysisReports,
+    identifierReports,
+    pyramid,
+    nakshatraSummary
+  } = data;
+
   const equation = nameData.clean
     .split("")
     .map((letter, index) => `${letter}(${nameData.nums[index]})`)
@@ -811,13 +1804,129 @@ function renderTrace(nameData, trace) {
   el.nameTrace.innerHTML = "";
   if (!trace.length) {
     el.nameTrace.innerHTML = "<li>No trace data available.</li>";
+  } else {
+    trace.forEach((step) => {
+      const item = document.createElement("li");
+      item.textContent = `${step.letter}(${step.value}) -> ${step.sign}`;
+      el.nameTrace.appendChild(item);
+    });
+  }
+
+  if (el.destinyValues && destiny) {
+    el.destinyValues.textContent = `Pythagorean destiny: ${destiny.digits.join(" + ")} = ${destiny.total} -> ${destiny.value}`;
+  }
+
+  if (el.chaldeanDestinyValues && chDestinyData) {
+    const dayMath = chDestinyData.dayDigits.join(" + ");
+    const yearMath = chDestinyData.yearDigits.join(" + ");
+    el.chaldeanDestinyValues.textContent = `Chaldean destiny (no leading zero rule): Day ${dayMath} = ${chDestinyData.daySum}, Month ${chDestinyData.monthName} = ${chDestinyData.monthValue}, Year ${yearMath} = ${chDestinyData.yearSum}; Total ${chDestinyData.total} -> ${chDestinyData.value}`;
+  }
+
+  if (el.lagnaDestinyValues && lagnaDestinyData) {
+    const lagnaDisplay = nakshatraSummary && nakshatraSummary.lagnaValue !== null
+      ? (nakshatraSummary.lagnaAdjusted ? `${lagnaDestinyData.total} -> ${nakshatraSummary.lagnaValue}` : `${nakshatraSummary.lagnaValue}`)
+      : `${lagnaDestinyData.total}`;
+    const lagnaMath = lagnaDestinyData.values.length ? lagnaDestinyData.values.join(" + ") : "-";
+    el.lagnaDestinyValues.textContent = `Selected lagna method ${lagnaDestinyData.methodLabel} (${lagnaDestinyData.token}): ${lagnaMath} = ${lagnaDisplay}`;
+  }
+
+  if (el.coreAuditTrail) {
+    const pyramidApex = pyramid && pyramid.length ? pyramid[pyramid.length - 1][0] : "-";
+    const nameMath = nameData.nums.length ? nameData.nums.join(" + ") : "-";
+    const rulingDay = chDestinyData && chDestinyData.dayDigits
+      ? chDestinyData.dayDigits.join("")
+      : "-";
+    const lines = [
+      `Name total/reduced: ${nameMath} = ${nameTotals.total} -> ${nameTotals.reduced}`,
+      `Pyramid apex: ${pyramidApex}`,
+      `Ruling number: Day ${rulingDay} -> ${ruling}`,
+      `Chaldean month value: ${chDestinyData && chDestinyData.monthName ? chDestinyData.monthName : "-"} -> ${chMonth}`,
+      `Chaldean destiny final: ${chDestinyData ? chDestinyData.total : "-"} -> ${chDestiny}`
+    ];
+    el.coreAuditTrail.innerHTML = "";
+    lines.forEach((line) => {
+      const item = document.createElement("li");
+      item.textContent = line;
+      el.coreAuditTrail.appendChild(item);
+    });
+  }
+
+  if (el.identifierTrace) {
+    el.identifierTrace.innerHTML = "";
+    if (!identifierReports.length) {
+      el.identifierTrace.innerHTML = "<li>No optional identifiers provided.</li>";
+    } else {
+      identifierReports.forEach((report) => {
+        const item = document.createElement("li");
+        item.textContent = `${report.label}: ${report.values.join(" + ")} = ${report.total} -> ${report.reduced} | Pyramid 2D ${report.pyramidTwoDigit ?? "-"} | Pyramid 1D ${report.pyramidSingleDigit ?? "-"}`;
+        el.identifierTrace.appendChild(item);
+      });
+    }
+  }
+
+  renderAuditPyramid(analysisReports);
+}
+
+function renderAuditPyramid(reports) {
+  if (!el.auditPyramid) {
     return;
   }
 
-  trace.forEach((step) => {
-    const item = document.createElement("li");
-    item.textContent = `${step.letter}(${step.value}) -> ${step.sign}`;
-    el.nameTrace.appendChild(item);
+  el.auditPyramid.innerHTML = "";
+  if (!reports || !reports.length) {
+    el.auditPyramid.textContent = "No pyramid values available.";
+    return;
+  }
+
+  reports.forEach((report) => {
+    const rows = report.pyramidRows && report.pyramidRows.length
+      ? report.pyramidRows
+      : pyramidRows(report.values || [], false);
+
+    const card = document.createElement("article");
+    card.className = "audit-pyramid-card";
+    card.innerHTML = `
+      <h4 class="audit-pyramid-title">${report.label}</h4>
+      <p class="audit-pyramid-meta">Input: ${report.clean} | Chaldean: ${report.total} -> ${report.reduced}</p>
+      <p class="audit-top-values"><strong>Top Values:</strong> ${(report.values && report.values.length) ? report.values.join(", ") : "-"}</p>
+    `;
+
+    const rowsWrap = document.createElement("div");
+    rowsWrap.className = "audit-pyramid";
+
+    rows.forEach((row, rowIndex) => {
+      const rowEl = document.createElement("div");
+      rowEl.className = "audit-pyramid-row";
+
+      const label = document.createElement("span");
+      label.className = "audit-row-label";
+      if (rows.length === 1) {
+        label.textContent = "Top / Apex";
+      } else if (rowIndex === 0) {
+        label.textContent = "Top";
+      } else if (rowIndex === rows.length - 1) {
+        label.textContent = "Apex";
+      } else {
+        label.textContent = `Row ${rowIndex + 1}`;
+      }
+
+      const values = document.createElement("div");
+      values.className = "audit-row-values";
+
+      row.forEach((value) => {
+        const bubble = document.createElement("span");
+        bubble.className = "pyramid-bubble audit-bubble";
+        bubble.textContent = String(value);
+        values.appendChild(bubble);
+      });
+
+      rowEl.appendChild(label);
+      rowEl.appendChild(values);
+      rowsWrap.appendChild(rowEl);
+    });
+
+    card.appendChild(rowsWrap);
+    el.auditPyramid.appendChild(card);
   });
 }
 

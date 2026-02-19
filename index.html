@@ -11,7 +11,7 @@
     href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260219-1310" />
 </head>
 <body>
   <div class="bg-orb orb-a" aria-hidden="true"></div>
@@ -44,37 +44,105 @@
         </label>
       </div>
 
-      <div class="form-actions">
-        <button id="calculateBtn" type="submit" class="btn-primary">Generate Report</button>
-        <button id="resetBtn" type="button" class="btn-secondary">Clear Form</button>
+      <div class="lagna-method-row">
+        <label class="form-field lagna-method-field">
+          <span>Lagna Destiny Method</span>
+          <select id="lagnaMethodInput" aria-describedby="lagnaMethodHelp">
+            <option value="month_name" selected>Chaldean Pyramid: 1-January-2025</option>
+            <option value="numeric">Chaldean Pyramid: 1-1-2025</option>
+          </select>
+        </label>
+        <p id="lagnaMethodHelp" class="lagna-method-help">
+          Used for Nakshatra lagna only. Day and month values are never zero-padded. Kundli mapping normalizes to 10-108 and reduces only above 108.
+        </p>
       </div>
-      <p id="formHint" class="hint">Enter your name and date of birth to generate a complete Tanktrik numerology report.</p>
+
+      <section id="identifierBlock" class="identifier-block">
+        <button
+          id="identifierAccordionToggle"
+          type="button"
+          class="identifier-accordion-toggle"
+          aria-expanded="false"
+          aria-controls="identifierAccordionPanel"
+        >
+          <span class="identifier-accordion-title-wrap">
+            <span class="identifier-accordion-title">Optional identifiers</span>
+            <span id="identifierCountBadge" class="identifier-count-badge" aria-live="polite">0</span>
+          </span>
+          <span class="identifier-accordion-subtitle">Phone, vehicle, Aadhar, SSN, and custom IDs</span>
+          <span class="identifier-accordion-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div id="identifierAccordionPanel" class="identifier-accordion-panel" hidden>
+          <div class="identifier-head">
+            <p class="identifier-help">
+              Add optional IDs. Only letters and digits are kept.
+            </p>
+            <button id="addIdentifierBtn" type="button" class="btn-add-identifier" aria-label="Add optional identifier">
+              <span class="btn-add-icon" aria-hidden="true">+</span>
+              <span class="btn-add-label">Add</span>
+            </button>
+          </div>
+          <div id="identifierRows" class="identifier-rows"></div>
+        </div>
+      </section>
+
+      <div class="form-footer">
+        <div class="form-actions">
+          <button id="calculateBtn" type="submit" class="btn-primary">Generate Report</button>
+          <button id="exportPdfBtn" type="button" class="btn-secondary btn-export" disabled aria-disabled="true">Export PDF</button>
+          <button id="resetBtn" type="button" class="btn-secondary">Clear Form</button>
+        </div>
+        <p id="formHint" class="hint" role="status" aria-live="polite">
+          Enter full name and date of birth to generate your Tanktrik numerology report.
+        </p>
+      </div>
     </form>
   </header>
 
   <main id="dashboard" class="shell stack" hidden>
+    <section id="printReportHead" class="print-report-head" hidden>
+      <h2>Uma Shankar's Tanktrik Numerology Report</h2>
+      <p id="printReportMeta"></p>
+    </section>
+
     <section id="summaryGrid" class="summary-grid"></section>
 
-    <section class="panel">
-      <h2 class="section-title">Compatibility & Remedies</h2>
+    <section id="insightSection" class="panel insight-panel" hidden>
+      <h2 class="section-title">Report Snapshot</h2>
       <p class="panel-copy">
-        Compatibility strengths, gemstone remedies, color recommendations, and planetary influence for your four anchor numbers.
+        Start here for the executive view. This summarizes risk signals, lagna context, and immediate remedy focus before detailed analysis.
       </p>
-      <div id="attributeCards" class="attribute-grid"></div>
+      <div id="insightGrid" class="insight-grid"></div>
+    </section>
+
+    <nav class="report-nav" aria-label="Report Sections">
+      <a href="#summaryGrid">Top Numbers</a>
+      <a href="#insightSection">Snapshot</a>
+      <a href="#optionalReportSection">Analysis</a>
+      <a href="#nakshatraSection">House Grid</a>
+      <a href="#compatibilitySection">Compatibility</a>
+      <a href="#primaryCalcSection">Calculations</a>
+      <a href="#timelineSection">Timeline</a>
+    </nav>
+
+    <section id="optionalReportSection" class="panel" hidden>
+      <h2 class="section-title">Unified Analysis</h2>
+      <p class="panel-copy">
+        Chaldean and pyramid outputs for your primary name and optional identifiers.
+        Consecutive zeros are counted as 9 in identifier Chaldean totals.
+      </p>
       <div class="table-wrap">
-        <table class="data-table wide-table" id="attributeTable">
+        <table class="data-table wide-table" id="optionalReportTable">
           <thead>
             <tr>
-              <th>Metric</th>
-              <th>Value</th>
-              <th>Excellent Matches</th>
-              <th>Supportive Matches</th>
-              <th>Neutral Matches</th>
-              <th>Challenging Matches</th>
-              <th>Primary Gemstone</th>
-              <th>Alternative Gemstone</th>
-              <th>Favorable Colors</th>
-              <th>Ruling Planet</th>
+              <th>Category</th>
+              <th>Input</th>
+              <th>Chaldean Values</th>
+              <th>Chaldean Total</th>
+              <th>Chaldean Reduced</th>
+              <th>Is Bad Number</th>
+              <th>Pyramid Apex</th>
+              <th>Pyramid Rows</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -82,7 +150,52 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section id="nakshatraSection" class="panel" hidden>
+      <h2 class="section-title">Nakshatra Pada House Grid</h2>
+      <p class="panel-copy">
+        Lagna is derived from your selected Chaldean pyramid destiny method. House placements are mapped for Chaldean, Pyramid 2D, and Pyramid 1D values across all analyzed entries.
+      </p>
+      <p id="lagnaInfo" class="lagna-info"></p>
+      <div id="nakshatraGrid" class="nakshatra-grid"></div>
+      <p id="nakshatraUnmapped" class="panel-copy nakshatra-unmapped" hidden></p>
+      <div class="table-wrap">
+        <table class="data-table" id="nakshatraHouseTable">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Component</th>
+              <th>Number</th>
+              <th>Sign</th>
+              <th>House</th>
+              <th>6/8/12 Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="compatibilitySection" class="panel">
+      <h2 class="section-title">Compatibility & Remedies</h2>
+      <p class="panel-copy">
+        Compact matrix of compatibility, gemstone guidance, favorable colors, and planetary influence.
+      </p>
+      <div class="table-wrap">
+        <table class="data-table compact-attribute-table" id="attributeTable">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Value</th>
+              <th>Match Profile</th>
+              <th>Remedies & Influence</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="primaryCalcSection" class="panel">
       <h2 class="section-title">Primary Calculations</h2>
       <div id="coreBreakdown" class="card-grid"></div>
     </section>
@@ -116,7 +229,7 @@
       </article>
     </section>
 
-    <section class="panel">
+    <section id="timelineSection" class="panel">
       <div class="timeline-head">
         <h2 class="section-title">Name-Year Activation Timeline</h2>
         <p class="panel-copy">Date sequence generated from cyclic name letters and their Pythagorean values.</p>
@@ -149,6 +262,24 @@
           <h3>Pythagorean Placement Trace</h3>
           <ul id="nameTrace" class="trace-list"></ul>
         </article>
+        <article class="trace-item">
+          <h3>Destiny Computation Audit</h3>
+          <p id="destinyValues" class="mono-line"></p>
+          <p id="chaldeanDestinyValues" class="mono-line"></p>
+          <p id="lagnaDestinyValues" class="mono-line"></p>
+        </article>
+        <article class="trace-item">
+          <h3>Core Number Equation Audit</h3>
+          <ul id="coreAuditTrail" class="trace-list"></ul>
+        </article>
+        <article class="trace-item">
+          <h3>Identifier Computation Audit</h3>
+          <ul id="identifierTrace" class="trace-list"></ul>
+        </article>
+        <article class="trace-item trace-item-wide">
+          <h3>Pyramid Audits (Top to Apex)</h3>
+          <div id="auditPyramid" class="audit-pyramid-stack"></div>
+        </article>
       </div>
     </section>
   </main>
@@ -157,6 +288,6 @@
     Powered by Uma Shankar's Tanktrik Numerology engine.
   </footer>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20260219-1310"></script>
 </body>
 </html>
