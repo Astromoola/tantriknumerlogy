@@ -752,7 +752,16 @@ function chaldeanValuesFromIdentifier(cleanToken) {
           j += 1;
         }
         const zeroRun = j - i;
-        values.push(zeroRun >= 2 ? 9 : 0);
+        // For Chaldean totals only: consecutive zeros contribute as 9
+        // in pairwise chunks (00 -> 9, 000 -> 9 + 0, etc).
+        const zeroPairs = Math.floor(zeroRun / 2);
+        const singleZeroLeft = zeroRun % 2;
+        for (let z = 0; z < zeroPairs; z += 1) {
+          values.push(9);
+        }
+        if (singleZeroLeft) {
+          values.push(0);
+        }
         i = j;
         continue;
       }
@@ -771,12 +780,32 @@ function chaldeanValuesFromIdentifier(cleanToken) {
   return values;
 }
 
+function identifierPyramidValues(cleanToken) {
+  const token = sanitizeIdentifierToken(cleanToken);
+  const values = [];
+
+  [...token].forEach((ch) => {
+    if (ch >= "0" && ch <= "9") {
+      values.push(Number(ch));
+      return;
+    }
+
+    const mapped = CHALDEAN[ch];
+    if (mapped !== undefined) {
+      values.push(mapped);
+    }
+  });
+
+  return values;
+}
+
 function buildIdentifierReports(entries) {
   return entries.map((entry) => {
     const values = chaldeanValuesFromIdentifier(entry.clean);
+    const pyramidTopValues = identifierPyramidValues(entry.clean);
     const total = values.reduce((sum, value) => sum + value, 0);
     const reduced = reduceToDigit(total, true);
-    const pyramid = pyramidRows(values, false);
+    const pyramid = pyramidRows(pyramidTopValues, false, true);
     const apex = pyramid.length ? pyramid[pyramid.length - 1][0] : "-";
     const pyramidRowsCompact = pyramid.map((row) => row.join("")).join(" / ");
     const pyramidTwoDigit = pyramid.length >= 2 && pyramid[pyramid.length - 2].length >= 2
@@ -787,6 +816,8 @@ function buildIdentifierReports(entries) {
       label: entry.label,
       clean: entry.clean,
       values,
+      pyramidTopValues,
+      zeroPairAsNineInPyramid: true,
       total,
       reduced,
       apex,
@@ -809,6 +840,8 @@ function buildPrimaryNameAnalysis(nameData, nameTotals, pyramid) {
     label: "Name (Primary)",
     clean: nameData.clean,
     values: nameData.nums,
+    pyramidTopValues: nameData.nums,
+    zeroPairAsNineInPyramid: false,
     total: nameTotals.total,
     reduced: nameTotals.reduced,
     apex,
@@ -1172,7 +1205,7 @@ function nameNumber(nums, keepMasters = true) {
   };
 }
 
-function pyramidRows(nums, keepMasters = false) {
+function pyramidRows(nums, keepMasters = false, zeroPairAsNine = false) {
   if (!nums.length) {
     return [];
   }
@@ -1181,6 +1214,10 @@ function pyramidRows(nums, keepMasters = false) {
     const prev = rows[rows.length - 1];
     const next = [];
     for (let i = 0; i < prev.length - 1; i += 1) {
+      if (zeroPairAsNine && prev[i] === 0 && prev[i + 1] === 0) {
+        next.push(9);
+        continue;
+      }
       next.push(reduceToDigit(prev[i] + prev[i + 1], keepMasters));
     }
     rows.push(next);
@@ -1881,14 +1918,21 @@ function renderAuditPyramid(reports) {
   reports.forEach((report) => {
     const rows = report.pyramidRows && report.pyramidRows.length
       ? report.pyramidRows
-      : pyramidRows(report.values || [], false);
+      : pyramidRows(
+        report.pyramidTopValues || report.values || [],
+        false,
+        Boolean(report.zeroPairAsNineInPyramid)
+      );
 
     const card = document.createElement("article");
+    const topValues = report.pyramidTopValues && report.pyramidTopValues.length
+      ? report.pyramidTopValues
+      : (report.values || []);
     card.className = "audit-pyramid-card";
     card.innerHTML = `
       <h4 class="audit-pyramid-title">${report.label}</h4>
       <p class="audit-pyramid-meta">Input: ${report.clean} | Chaldean: ${report.total} -> ${report.reduced}</p>
-      <p class="audit-top-values"><strong>Top Values:</strong> ${(report.values && report.values.length) ? report.values.join(", ") : "-"}</p>
+      <p class="audit-top-values"><strong>Top Values:</strong> ${topValues.length ? topValues.join(", ") : "-"}</p>
     `;
 
     const rowsWrap = document.createElement("div");
